@@ -6,8 +6,11 @@ import (
 	"net/url"
 	"html/template"
 	"io/ioutil"
+	"strconv"
 	"appengine"
 	"appengine/urlfetch"
+	"appengine/taskqueue"
+	"appengine/datastore"
 	"encoding/json"
 )
 
@@ -56,6 +59,12 @@ type Timeline struct {
 	Total_number int64
 }
 
+type TaskProgress struct {
+	Uid string
+	Page int
+	Finished bool
+}
+
 func init() {
 
 	PageTemplates = template.Must(template.ParseFiles(
@@ -66,8 +75,9 @@ func init() {
 	http.HandleFunc("/", MainHandler)
 	http.HandleFunc("/login/", LoginHandler)
 	http.HandleFunc("/export/", ExportHandler)
-	http.HandleFunc("/process/", CheckProcessHandler)
-	http.HandleFunc("/task/", TaskHandler)
+	http.HandleFunc("/progress/", CheckProgressHandler)
+	http.HandleFunc("/task/fetcher/", FetcherHandler)
+	http.HandleFunc("/task/add/", AddExportTaskHandler)
 }
 
 func MainHandler(w http.ResponseWriter, r *http.Request) {
@@ -149,9 +159,58 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func CheckProcessHandler(w http.ResponseWriter, r *http.Request) {
+func CheckProgressHandler(w http.ResponseWriter, r *http.Request) {
 }
 
-func TaskHandler(w http.ResponseWriter, r *http.Request) {
+func clearTaskProgress(c appengine.Context, uid string) {
+	q := datastore.NewQuery("TaskProgress").Filter("Uid =", uid)
+	tmp := []TaskProgress{}
+	if keys, err := q.GetAll(c, &tmp); err == nil {
+		datastore.DeleteMulti(c, keys)
+	}
+}
+
+func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
+	access_token := r.FormValue("access_token")
+	uid := r.FormValue("uid")
+	total_number := r.FormValue("total_number")
+	if access_token == "" || uid == "" || total_number == "" {
+		fmt.Fprintln(w, "<html><meta http-equiv=\"refresh\" content=\"3;url=/\"/><body>please login first, redirect to main page after 3 second.</body></html>")
+		return
+	}
+
+	c := appengine.NewContext(r)
+	page_count := 5000
+	total_count, _ := strconv.Atoi(total_number)
+	pages := (total_count + page_count - 1) / page_count + 1
+	clearTaskProgress(c, uid)
+	for page:= 1 ; page < pages ; page++ {
+
+		taskProgress := TaskProgress{
+			Uid: uid,
+			Page: page,
+			Finished: false,
+		}
+		if _, err := datastore.Put(c, datastore.NewIncompleteKey(c, "TaskProgress", nil), &taskProgress); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+
+		t := taskqueue.NewPOSTTask("/task/fetcher/", url.Values{
+									"access_token": {access_token},
+									"uid": {uid},
+									"page_count": {string(page_count)},
+									"page": {string(page)},
+								})
+		if _, err := taskqueue.Add(c, t, ""); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func FetcherHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "ok")
 }
 
