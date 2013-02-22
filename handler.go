@@ -1,23 +1,23 @@
 package exportweibo
 
 import (
+	"appengine"
+	"appengine/datastore"
+	"appengine/taskqueue"
+	"appengine/urlfetch"
+	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"html/template"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"strconv"
-	"appengine"
-	"appengine/urlfetch"
-	"appengine/taskqueue"
-	"appengine/datastore"
-	"encoding/json"
 )
 
-const(
-	HostName = "127.0.0.1"
-	ApiHost = ""
-	APP_KEY = "1675182590"
+const (
+	HostName   = "127.0.0.1"
+	ApiHost    = ""
+	APP_KEY    = "1675182590"
 	APP_SECRET = "4879a47fc74e47cb5c8c7643f2e107ad"
 )
 
@@ -25,59 +25,59 @@ var PageTemplates *template.Template
 
 type LoginData struct {
 	Access_token string
-	Remind_in string
-	Expires_in int
-	Uid string
+	Remind_in    string
+	Expires_in   int
+	Uid          string
 }
 
 type StatusDS struct {
-	Uid string
-	Id int64
-	Text string
+	Uid    string
+	Id     int64
+	Text   string
 	Status []byte
 }
 
 type Status struct {
-	Created_at string
-	Id	int64
-	Mid	string
-	Idstr	string
-	Text	string
-	Source	string
-	Favorited bool
-	Truncated bool
-	In_reply_to_status_id string
-	In_reply_to_user_id string
+	Created_at              string
+	Id                      int64
+	Mid                     string
+	Idstr                   string
+	Text                    string
+	Source                  string
+	Favorited               bool
+	Truncated               bool
+	In_reply_to_status_id   string
+	In_reply_to_user_id     string
 	In_reply_to_screen_name string
-	Thumbnail_pic	string
-	Bmiddle_pic	string
-	Original_pic	string
-	Reposts_count	int
-	Comments_count	int
-	Attitudes_count	int
-	Mlevel	int
-	Retweeted_status *Status
+	Thumbnail_pic           string
+	Bmiddle_pic             string
+	Original_pic            string
+	Reposts_count           int
+	Comments_count          int
+	Attitudes_count         int
+	Mlevel                  int
+	Retweeted_status        *Status
 }
 
 type Timeline struct {
-	Statuses []Status
+	Statuses        []Status
 	Previous_cursor int64
-	Next_cursor int64
-	Total_number int64
+	Next_cursor     int64
+	Total_number    int64
 }
 
 type TaskProgress struct {
-	Uid string
-	Page int
+	Uid      string
+	Page     int
 	Finished bool
 }
 
 func init() {
 
 	PageTemplates = template.Must(template.ParseFiles(
-					"templates/index.html",
-					"templates/login.html",
-				))
+		"templates/index.html",
+		"templates/login.html",
+	))
 
 	http.HandleFunc("/", MainHandler)
 	http.HandleFunc("/login/", LoginHandler)
@@ -92,7 +92,6 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	PageTemplates.ExecuteTemplate(w, "index.html", oauth_url)
 }
 
-
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
 	if code == "" {
@@ -103,12 +102,12 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	client := urlfetch.Client(c)
 	resp, err := client.PostForm(access_url, url.Values{
-						"client_id" : {APP_KEY},
-						"client_secret" : {APP_SECRET},
-						"grant_type" : {"authorization_code"},
-						"code" : {code},
-						"redirect_uri" : {"http://127.0.0.1/"},
-					})
+		"client_id":     {APP_KEY},
+		"client_secret": {APP_SECRET},
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {"http://127.0.0.1/"},
+	})
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -126,7 +125,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, err)
 		return
 	}
-	http.Redirect(w, r, "/export/?access_token=" + loginData.Access_token + "&uid=" + loginData.Uid, 307)
+	http.Redirect(w, r, "/export/?access_token="+loginData.Access_token+"&uid="+loginData.Uid, 307)
 	//fmt.Fprintln(w, loginData.Access_token)
 }
 
@@ -152,7 +151,7 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, err)
 		return
 	}
-	
+
 	timeline := Timeline{}
 	err = json.Unmarshal(body, &timeline)
 	if err != nil {
@@ -160,11 +159,11 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%+v\n", timeline)
 		return
 	}
-	
+
 	b, _ := json.Marshal(timeline.Statuses[2])
 	fmt.Fprintln(w, string(b))
-//	fmt.Fprintf(w, "%+v\n", timeline)
-//	fmt.Fprintf(w, "retweeted:%+v\n", timeline.Statuses[2].Retweeted_status)
+	//	fmt.Fprintf(w, "%+v\n", timeline)
+	//	fmt.Fprintf(w, "retweeted:%+v\n", timeline.Statuses[2].Retweeted_status)
 
 }
 
@@ -191,12 +190,12 @@ func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	page_count := 50
 	total_count, _ := strconv.Atoi(total_number)
-	pages := (total_count + page_count - 1) / page_count + 1
+	pages := (total_count+page_count-1)/page_count + 1
 	clearTaskProgress(c, uid)
-	for page:= 1 ; page < pages ; page++ {
+	for page := 1; page < pages; page++ {
 		taskProgress := TaskProgress{
-			Uid: uid,
-			Page: page,
+			Uid:      uid,
+			Page:     page,
 			Finished: false,
 		}
 		if _, err := datastore.Put(c, datastore.NewIncompleteKey(c, "TaskProgress", nil), &taskProgress); err != nil {
@@ -204,13 +203,12 @@ func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-
 		t := taskqueue.NewPOSTTask("/task/fetcher/", url.Values{
-									"access_token": {access_token},
-									"uid": {uid},
-									"page_count": {strconv.Itoa(page_count)},
-									"page": {strconv.Itoa(page)},
-								})
+			"access_token": {access_token},
+			"uid":          {uid},
+			"page_count":   {strconv.Itoa(page_count)},
+			"page":         {strconv.Itoa(page)},
+		})
 		if _, err := taskqueue.Add(c, t, ""); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -225,7 +223,7 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 	page_count := r.FormValue("page_count")
 	page := r.FormValue("page")
 	//fmt.Printf("a=%s u=%s c=%s p=%s", access_token, uid, page_count, page)
-	if page == "" || page_count =="" || uid == "" || access_token =="" {
+	if page == "" || page_count == "" || uid == "" || access_token == "" {
 		fmt.Println("page == \"\"")
 		http.Error(w, "page == \"\"", http.StatusInternalServerError)
 		return
@@ -245,7 +243,7 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	timeline := Timeline{}
 	err = json.Unmarshal(body, &timeline)
 	if err != nil {
@@ -262,10 +260,10 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		status_bytes, _ := json.Marshal(status)
-		statusds := StatusDS {
-			Uid: uid,
-			Id: status.Id,
-			Text: status.Text,
+		statusds := StatusDS{
+			Uid:    uid,
+			Id:     status.Id,
+			Text:   status.Text,
 			Status: status_bytes,
 		}
 		if _, err := datastore.Put(c, datastore.NewIncompleteKey(c, "StatusDS", nil), &statusds); err != nil {
@@ -277,7 +275,7 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 	q := datastore.NewQuery("TaskProgress").Filter("Uid =", uid).Filter("Page =", page_int)
 	t := q.Run(c)
 	var taskProgress TaskProgress
-	key ,err := t.Next(&taskProgress)
+	key, err := t.Next(&taskProgress)
 	if err == nil {
 		taskProgress.Finished = true
 		datastore.Put(c, key, &taskProgress)
@@ -285,4 +283,3 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 	//w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "fetcher ok!")
 }
-
