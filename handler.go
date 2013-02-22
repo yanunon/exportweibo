@@ -30,6 +30,13 @@ type LoginData struct {
 	Uid string
 }
 
+type StatusDS struct {
+	Uid string
+	Id int64
+	Text string
+	Status []byte
+}
+
 type Status struct {
 	Created_at string
 	Id	int64
@@ -153,8 +160,10 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%+v\n", timeline)
 		return
 	}
-
-	fmt.Fprintf(w, "%+v\n", timeline)
+	
+	b, _ := json.Marshal(timeline.Statuses[2])
+	fmt.Fprintln(w, string(b))
+//	fmt.Fprintf(w, "%+v\n", timeline)
 //	fmt.Fprintf(w, "retweeted:%+v\n", timeline.Statuses[2].Retweeted_status)
 
 }
@@ -180,12 +189,11 @@ func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := appengine.NewContext(r)
-	page_count := 5000
+	page_count := 50
 	total_count, _ := strconv.Atoi(total_number)
 	pages := (total_count + page_count - 1) / page_count + 1
 	clearTaskProgress(c, uid)
 	for page:= 1 ; page < pages ; page++ {
-
 		taskProgress := TaskProgress{
 			Uid: uid,
 			Page: page,
@@ -200,17 +208,81 @@ func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
 		t := taskqueue.NewPOSTTask("/task/fetcher/", url.Values{
 									"access_token": {access_token},
 									"uid": {uid},
-									"page_count": {string(page_count)},
-									"page": {string(page)},
+									"page_count": {strconv.Itoa(page_count)},
+									"page": {strconv.Itoa(page)},
 								})
 		if _, err := taskqueue.Add(c, t, ""); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
+	fmt.Fprintln(w, "add export task ok")
 }
 
 func FetcherHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "ok")
+	access_token := r.FormValue("access_token")
+	uid := r.FormValue("uid")
+	page_count := r.FormValue("page_count")
+	page := r.FormValue("page")
+	//fmt.Printf("a=%s u=%s c=%s p=%s", access_token, uid, page_count, page)
+	if page == "" || page_count =="" || uid == "" || access_token =="" {
+		fmt.Println("page == \"\"")
+		http.Error(w, "page == \"\"", http.StatusInternalServerError)
+		return
+	}
+
+	get_timeline_url := "https://api.weibo.com/2/statuses/user_timeline.json?access_token=" + access_token + "&count=" + page_count + "&page=" + page
+	c := appengine.NewContext(r)
+	client := urlfetch.Client(c)
+	resp, err := client.Get(get_timeline_url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	timeline := Timeline{}
+	err = json.Unmarshal(body, &timeline)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, status := range timeline.Statuses {
+		//check exist
+		cq := datastore.NewQuery("StatusDS").Filter("Id =", status.Id)
+		cc, _ := cq.Count(c)
+		if cc > 0 {
+			continue
+		}
+
+		status_bytes, _ := json.Marshal(status)
+		statusds := StatusDS {
+			Uid: uid,
+			Id: status.Id,
+			Text: status.Text,
+			Status: status_bytes,
+		}
+		if _, err := datastore.Put(c, datastore.NewIncompleteKey(c, "StatusDS", nil), &statusds); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	page_int, _ := strconv.Atoi(page)
+	q := datastore.NewQuery("TaskProgress").Filter("Uid =", uid).Filter("Page =", page_int)
+	t := q.Run(c)
+	var taskProgress TaskProgress
+	key ,err := t.Next(&taskProgress)
+	if err == nil {
+		taskProgress.Finished = true
+		datastore.Put(c, key, &taskProgress)
+	}
+	//w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "fetcher ok!")
 }
 
