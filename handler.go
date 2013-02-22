@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	HostName   = "127.0.0.1"
+//	HostName   = "127.0.0.1"
 	ApiHost    = ""
 	APP_KEY    = "1675182590"
 	APP_SECRET = "4879a47fc74e47cb5c8c7643f2e107ad"
@@ -88,7 +88,7 @@ func init() {
 }
 
 func MainHandler(w http.ResponseWriter, r *http.Request) {
-	oauth_url := "https://api.weibo.com/oauth2/authorize?client_id=" + APP_KEY + "&redirect_uri=" + r.URL.Scheme + "http://" + HostName + "/login/&response_type=code"
+	oauth_url := "https://api.weibo.com/oauth2/authorize?client_id=" + APP_KEY + "&redirect_uri=" + r.URL.Scheme + "://" + r.URL.Host + "/login/&response_type=code"
 	PageTemplates.ExecuteTemplate(w, "index.html", oauth_url)
 }
 
@@ -106,7 +106,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		"client_secret": {APP_SECRET},
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
-		"redirect_uri":  {"http://127.0.0.1/"},
+		"redirect_uri":  {r.URL.Scheme + "://" + r.URL.Host + "/login/"},
 	})
 	if err != nil {
 		fmt.Fprintln(w, err)
