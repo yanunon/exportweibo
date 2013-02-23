@@ -246,7 +246,7 @@ func AddExportTaskHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	fmt.Fprintln(w, "add export task ok")
+	fmt.Fprint(w, "add export task ok")
 }
 
 func FetcherHandler(w http.ResponseWriter, r *http.Request) {
