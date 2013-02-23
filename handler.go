@@ -59,6 +59,41 @@ type Status struct {
 	Retweeted_status        *Status
 }
 
+type User struct {
+	Id	int64
+	Idstr string
+	Screen_name string
+	Name string
+	Province string
+	City string
+	Location string
+	Description string
+	Url string
+	Profile_image_url string
+	Profile_url	string
+	Domain string
+	Weihao string
+	Gender string
+	Followers_count int
+	Friends_count int
+	Statuses_count int
+	Favourites_count int
+	Created_at string
+	Following	bool
+	Allow_all_act_msg bool
+	Geo_enabled	bool
+	Verified	bool
+	Verified_type	int
+	Remark	string
+	Allow_all_comment	bool
+	Avatar_large	string
+	Verified_reason	string
+	Follow_me	bool
+	Online_status	int
+	Bi_followers_count	int
+	Lang string
+}
+
 type Timeline struct {
 	Statuses        []Status
 	Previous_cursor int64
@@ -76,7 +111,7 @@ func init() {
 
 	PageTemplates = template.Must(template.ParseFiles(
 		"templates/index.html",
-		"templates/login.html",
+		"templates/export.html",
 	))
 
 	http.HandleFunc("/", MainHandler)
@@ -138,10 +173,10 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	get_status_count_url := "https://api.weibo.com/2/statuses/user_timeline.json?access_token=" + access_token
+	get_user_url := "https://api.weibo.com/2/users/show.json?access_token=" + access_token + "&uid=" + uid
 	c := appengine.NewContext(r)
 	client := urlfetch.Client(c)
-	resp, err := client.Get(get_status_count_url)
+	resp, err := client.Get(get_user_url)
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -153,17 +188,16 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	timeline := Timeline{}
-	err = json.Unmarshal(body, &timeline)
+	var user User
+	err = json.Unmarshal(body, &user)
 	if err != nil {
 		fmt.Fprintln(w, err)
-		fmt.Fprintf(w, "%+v\n", timeline)
+		fmt.Fprintf(w, "%+v\n", user)
 		return
 	}
 
-	b, _ := json.Marshal(timeline.Statuses[2])
-	fmt.Fprintln(w, string(b))
-	//	fmt.Fprintf(w, "%+v\n", timeline)
+	//fmt.Fprintf(w, "%+v\n", user)
+	PageTemplates.ExecuteTemplate(w, "export.html", user)
 	//	fmt.Fprintf(w, "retweeted:%+v\n", timeline.Statuses[2].Retweeted_status)
 
 }
@@ -331,6 +365,7 @@ func DownloadStatusHandler(w http.ResponseWriter, r *http.Request) {
 		var statusds StatusDS
 		_, err := i.Next(&statusds)
 		if err == datastore.Done {
+			statuses = statuses[:len(statuses)-1]
 			statuses += "],\"count\":" + strconv.Itoa(count) + "}"
 			break
 		}
