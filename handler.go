@@ -82,9 +82,10 @@ func init() {
 	http.HandleFunc("/", MainHandler)
 	http.HandleFunc("/login/", LoginHandler)
 	http.HandleFunc("/export/", ExportHandler)
-	http.HandleFunc("/progress/", CheckProgressHandler)
+	http.HandleFunc("/task/progress/", CheckProgressHandler)
 	http.HandleFunc("/task/fetcher/", FetcherHandler)
 	http.HandleFunc("/task/add/", AddExportTaskHandler)
+	http.HandleFunc("/download/", DownloadStatusHandler)
 }
 
 func MainHandler(w http.ResponseWriter, r *http.Request) {
@@ -165,9 +166,6 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 	//	fmt.Fprintf(w, "%+v\n", timeline)
 	//	fmt.Fprintf(w, "retweeted:%+v\n", timeline.Statuses[2].Retweeted_status)
 
-}
-
-func CheckProgressHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func clearTaskProgress(c appengine.Context, uid string) {
@@ -283,3 +281,63 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 	//w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "fetcher ok!")
 }
+
+func CheckProgressHandler(w http.ResponseWriter, r *http.Request) {
+	uid := r.FormValue("uid")
+	if uid == "" {
+		http.Error(w, "no uid", http.StatusNotFound)
+		return
+	}
+
+	c := appengine.NewContext(r)
+	q := datastore.NewQuery("TaskProgress").Filter("Uid =", uid)
+	count, err := q.Count(c)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	if count == 0 {
+		http.Error(w, "no task", http.StatusNotFound)
+		return
+	}
+	finished_count := 0
+	for i := q.Run(c);;{
+		var taskProgress TaskProgress
+		_, err := i.Next(&taskProgress)
+		if err == datastore.Done {
+			break
+		}
+
+		if taskProgress.Finished == true {
+			finished_count += 1
+		}
+	}
+	fmt.Fprintf(w, "{\"count\":%d, \"finished\":%d}", count, finished_count)
+}
+
+func DownloadStatusHandler(w http.ResponseWriter, r *http.Request) {
+	uid := r.FormValue("uid")
+	if uid == "" {
+		http.Error(w, "no uid", http.StatusNotFound)
+		return
+	}
+
+	c := appengine.NewContext(r)
+	q := datastore.NewQuery("StatusDS").Filter("Uid =", uid)
+
+	statuses := "{\"statuses\":["
+	count := 0
+	for i := q.Run(c);; {
+		var statusds StatusDS
+		_, err := i.Next(&statusds)
+		if err == datastore.Done {
+			statuses += "],\"count\":" + strconv.Itoa(count) + "}"
+			break
+		}
+
+		statuses += string(statusds.Status) + ","
+		count++
+	}
+	fmt.Fprintln(w, statuses)
+}
+
