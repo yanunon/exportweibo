@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"archive/zip"
+	"bytes"
+	"io"
 )
 
 const (
@@ -150,6 +153,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -183,6 +187,7 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -271,6 +276,7 @@ func FetcherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -359,20 +365,69 @@ func DownloadStatusHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	q := datastore.NewQuery("StatusDS").Filter("Uid =", uid).Order("-Id")
 
-	statuses := "{\"statuses\":["
+	statuses := "var timeline = {\"statuses\":[ "
 	count := 0
 	for i := q.Run(c);; {
 		var statusds StatusDS
 		_, err := i.Next(&statusds)
 		if err == datastore.Done {
 			statuses = statuses[:len(statuses)-1]
-			statuses += "],\"count\":" + strconv.Itoa(count) + "}"
+			statuses += "],\"count\":" + strconv.Itoa(count) + "};"
 			break
 		}
 
 		statuses += string(statusds.Status) + ","
 		count++
 	}
-	fmt.Fprintln(w, statuses)
+	
+	zipbytes, err := makeZipFile(statuses)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\"weibo.zip\"")
+	w.Write(zipbytes)
 }
 
+func makeZipFile(statuses string) (zipbytes []byte, err error){
+	reader, err := zip.OpenReader("templates/weibo.zip")
+	if err != nil {
+		return
+	}
+
+	defer reader.Close()
+
+	buf := new(bytes.Buffer)
+	writer := zip.NewWriter(buf)
+
+	for _, f := range reader.File {
+		wf, err := writer.Create(f.Name)
+		if err != nil {
+			continue
+		}
+
+		rf, err := f.Open()
+		if err != nil {
+			continue
+		}
+
+		io.Copy(wf, rf)
+		rf.Close()
+	}
+
+	wf, err := writer.Create("js/timeline.js")
+	if err != nil {
+		return
+	}
+	_, err = wf.Write([]byte(statuses))
+	if err != nil {
+		return
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return
+	}
+
+	return buf.Bytes(), err
+}
