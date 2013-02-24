@@ -357,7 +357,7 @@ func DownloadStatusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := appengine.NewContext(r)
-	q := datastore.NewQuery("StatusDS").Filter("Uid =", uid)
+	q := datastore.NewQuery("StatusDS").Filter("Uid =", uid).Order("-Id")
 
 	statuses := "{\"statuses\":["
 	count := 0
