@@ -8,24 +8,76 @@
 		<script src="js/bootstrap.min.js" type="text/javascript"></script>
 		<script src="js/timeline.js" type="text/javascript"></script>
 		<script type="text/javascript">
+			function FormatNumber(i){
+				if (i < 10){
+					return '0' + i;
+				}else {
+					return '' + i;
+				}
+			}
+
+			function FormatDatetime(dtstr) {
+				d = new Date(dtstr);
+				s = d.getFullYear() + '-' + FormatNumber(d.getMonth()+1) + '-' + FormatNumber(d.getDate());
+				s += ' ' + FormatNumber(d.getHours()) + ':' + FormatNumber(d.getMinutes()) + ':' + FormatNumber(d.getSeconds());
+				return s;
+			}
 			$().ready(function(){
-					var timeline_div = $('#timeline');
+					var status_items = $('#status_items');
 					for(var i = 0; i < timeline.count; i++) {
-					var status = timeline.statuses[i];
-					var status_div = '<span><p>'+status.Text + '</p>';
-					if(status.Retweeted_status != null) {
-						status_div += '<p>  RT//' + status.Retweeted_status.Text + '</p>';
-					}
-					status_div += '</span>';
-					timeline_div.append(status_div);
+						var status = timeline.statuses[i];
+						var status_div = '<li><p>'+status.Text + '</p>';
+						if(status.Retweeted_status != null) {
+						status_div += '<div class="rt_status">' + status.Retweeted_status.Text + '</div>';
+						}
+						status_div += '<div class="status_info">'
+						status_div += '<span class="post_time">' + FormatDatetime(status.Created_at) + '</span>'
+						status_div += '</div></li>';
+						status_items.append(status_div);
 					}
 			});
 		</script>
+		<style type="text/css">
+			.container {
+				width: 700px;
+				border:1px solid #c7c5b8;
+				margin-top: 2px;
+				padding: 10px;
+			}
+			.status_ol {
+				list-style: none;
+				margin-left: 0px;
+			}
+			.status_ol li{
+				border-bottom:1px dashed #CCC;
+				height:100%;
+				_padding:5px 10px;
+				overflow:hidden;
+				position:relative;
+				margin:0;
+				padding:10px 10px 5px
+			}
+			.rt_status {
+				margin-left: 10px;
+				margin-right: 10px;
+				background-color: #e9dfd5;
+			}
+			.post_time {
+				text-align: right;
+				font-size: 12px;
+			}
+			.status_info {
+				text-align: right;
+				margin: 5px;
+			}
+		</style>
 		<title>weibo</title>
 	</head>
 	<body>
 		<div class="container">
 			<div id="timeline">
+				<ol id="status_items" class="status_ol">
+				</ol>
 			</div>
 		</div>
 	</body>
